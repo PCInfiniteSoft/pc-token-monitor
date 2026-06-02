@@ -9,6 +9,10 @@
 
 A lightweight Windows desktop overlay app that monitors Claude Code token usage in real time. Styled like MSI Afterburner — compact, dark, always-on-top. Shows 5-hour and weekly usage limits with progress bars, plan badge, and system tray % indicator.
 
+## Hard Constraints
+
+- **Zero token consumption.** The app MUST NOT make any call to `/v1/messages` or any Claude inference endpoint. All data comes from local file reads and/or a usage-metadata HTTP endpoint only. The monitor must never inject prompts or context into Claude conversations.
+
 ---
 
 ## Architecture

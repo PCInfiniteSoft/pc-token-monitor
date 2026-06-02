@@ -1,0 +1,38 @@
+[package]
+name = "pc-token-monitor"
+version = "0.1.0"
+description = "PC Token Monitor - Claude Code token usage overlay"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "pc_token_monitor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "pc-token-monitor"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+notify = "6"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+ab_glyph = "0.2"
+imageproc = "0.25"
+
+[dev-dependencies]
+tempfile = "3"

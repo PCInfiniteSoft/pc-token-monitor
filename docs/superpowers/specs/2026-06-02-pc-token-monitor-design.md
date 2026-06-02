@@ -53,8 +53,8 @@ Frameless window, always-on-top toggle, ~280×160px
 │ 5HR   ████████░░░░  73%        │
 │       reset in  1h 24m         │
 │                                │
-│ WEEK  ██████████████  91%      │
-│       resets Mon 00:00         │
+│ 7DAY  ██████████████  91%      │
+│       resets in  2d 14h        │
 ├────────────────────────────────┤
 │ [⊤ Always on Top]  [×]        │
 └────────────────────────────────┘
@@ -66,7 +66,7 @@ Frameless window, always-on-top toggle, ~280×160px
 |---|---|
 | Background | `#0a0a0a` |
 | 5HR label | `#00d4ff` (cyan) |
-| WEEK label | `#ffd700` (yellow) |
+| 7DAY label | `#ffd700` (yellow) |
 | Plan badge | `#ffffff` on `#333` |
 | Font | Consolas / JetBrains Mono (monospace) |
 | Progress bar | green → orange → red (threshold >80%) |
@@ -111,34 +111,48 @@ Each line format:
 }
 ```
 
-### Usage Calculations
+### OAuth API (Primary Data Source)
 
-| Metric | Calculation |
+Load OAuth token from `~/.claude/.credentials.json`. Try endpoints in order:
+
+1. `https://api.anthropic.com/api/oauth/claude_cli/client_data` (newer)
+2. `https://api.anthropic.com/api/oauth/usage` (legacy fallback)
+
+Request headers:
+```
+Authorization: Bearer {token}
+anthropic-beta: oauth-2025-04-20
+```
+
+Response fields used:
+
+| Field | Used for |
 |---|---|
-| 5hr usage | Sum all tokens where `timestamp > now - 5h` |
-| Weekly usage | Sum all tokens where `timestamp > now - 7d` |
-| 5hr reset time | Earliest timestamp in 5hr window + 5h |
-| Weekly reset time | Start of next Monday 00:00 local time |
+| `five_hour.utilization` | 5hr progress bar % |
+| `five_hour.resets_at` | 5hr reset countdown (RFC3339) |
+| `seven_day.utilization` | 7-day progress bar % |
+| `seven_day.resets_at` | 7-day reset time (RFC3339) |
+| `seven_day_opus.utilization` | Opus-specific usage (display only, optional) |
+| `extra_usage.is_enabled` | Indicates Max plan (extra usage credits active) |
+
+**No token arithmetic needed** — API returns utilization percentages directly. The 7-day window is a rolling window, not a calendar week reset.
 
 ### Plan Detection
 
-Read `~/.claude/config.json` → `plan` field (exact field name to be verified during implementation by inspecting actual Claude Code config). If absent, detect from 5hr limit threshold:
+The OAuth API does not return plan type. Detection order:
 
-| Plan | 5hr token limit |
-|---|---|
-| Pro | ~900,000 |
-| Max 50 | ~4,500,000 |
-| Max 200 | ~18,000,000 |
+1. `extra_usage.is_enabled = true` → likely Max plan (show as `[MAX]`)
+2. First-run settings dialog → user selects plan manually (Pro / Max 50 / Max 200)
+3. Selection persisted in app config (`app_config.json` in app data dir)
 
-Default to Pro limits (conservative) if detection fails.
+### JSONL Fallback
 
-### OAuth Hybrid Fetch
+If OAuth fails (no credentials file, token expired, network error):
 
-1. Load OAuth token from `~/.claude/.credentials.json`
-2. Fetch server-side usage from internal Anthropic endpoint (same as Claude desktop usage page). Exact endpoint URL must be discovered during implementation by inspecting Claude desktop's network traffic (DevTools / Fiddler). This endpoint is undocumented and may change — the fallback exists for this reason.
-3. On HTTP 200 → use server data as primary
-4. On any failure → silently fall back to local JSONL
-5. Retry after 5-minute backoff on rate limit
+- Read `~/.claude/projects/**/*.jsonl` for raw conversation entries
+- Extract token counts from `assistant` message entries
+- Compute approximate utilization locally (less accurate — no server-side weighting)
+- Show `[OFFLINE]` indicator in UI when in fallback mode
 
 ### Refresh Cycle
 

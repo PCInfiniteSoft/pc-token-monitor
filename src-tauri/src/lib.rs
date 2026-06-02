@@ -2,6 +2,7 @@ mod types;
 mod oauth_fetcher;
 mod jsonl_parser;
 mod config;
+mod file_watcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

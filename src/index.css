@@ -8,5 +8,5 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   font-family: 'JetBrains Mono', Consolas, monospace;
-  background: #0a0a0a;
+  background: transparent;
 }

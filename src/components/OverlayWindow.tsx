@@ -26,7 +26,13 @@ export function OverlayWindow() {
   return (
     <div
       data-tauri-drag-region
-      className="w-full h-full bg-[#0a0a0a] border border-[#1e1e1e] flex flex-col select-none"
+      className="w-full h-full flex flex-col select-none"
+      style={{
+        // Transparent window: a dark text shadow keeps the light text and bars
+        // legible over both light and dark desktop content behind the overlay.
+        textShadow:
+          "0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8), 0 0 1px rgba(0,0,0,0.9)",
+      }}
     >
       {/* Header */}
       <div
@@ -40,7 +46,7 @@ export function OverlayWindow() {
       </div>
 
       {/* Usage bars */}
-      <div className="flex flex-col gap-2 px-2 py-2 flex-1">
+      <div className="flex flex-col gap-1.5 px-2 py-1.5 flex-1">
         {usage ? (
           <>
             <UsageBar

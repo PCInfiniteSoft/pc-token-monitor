@@ -12,7 +12,7 @@
     "windows": [
       {
         "title": "PC Token Monitor",
-        "width": 280,
+        "width": 200,
         "height": 140,
         "decorations": false,
         "alwaysOnTop": true,

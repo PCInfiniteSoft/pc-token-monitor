@@ -146,6 +146,24 @@ pub fn run() {
 
             tray::setup_tray(app)?;
 
+            // Default the overlay to the top-right corner of the primary
+            // monitor, just inside the edge.
+            if let Some(win) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = win.current_monitor() {
+                    let m_pos = monitor.position();
+                    let m_size = monitor.size();
+                    if let Ok(win_size) = win.outer_size() {
+                        // Leave room at the top so the overlay clears the menu
+                        // bar, and a small gap from the right edge.
+                        let right_margin: i32 = 12;
+                        let top_margin: i32 = 50;
+                        let x = m_pos.x + m_size.width as i32 - win_size.width as i32 - right_margin;
+                        let y = m_pos.y + top_margin;
+                        let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+                    }
+                }
+            }
+
             let app_handle = app.handle().clone();
             let usage_for_poll = usage_arc.clone();
             let config_for_poll = config_arc.clone();

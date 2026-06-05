@@ -39,10 +39,12 @@ export function OverlayWindow() {
         data-tauri-drag-region
         className="flex items-center justify-between px-2 py-1 border-b border-[#1e1e1e]"
       >
-        <span className="font-mono text-[10px] text-[#555] tracking-widest">
+        <span className="font-mono text-[10px] text-[#555] tracking-widest pointer-events-none">
           ⬡ PC TOKEN MONITOR
         </span>
-        <PlanBadge plan={plan} offline={offline} />
+        <span className="pointer-events-none">
+          <PlanBadge plan={plan} offline={offline} />
+        </span>
       </div>
 
       {/* Usage bars */}

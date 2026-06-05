@@ -19,6 +19,8 @@ pub struct UsageData {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum DataSource {
+    // snake_case would turn `OAuth` into `o_auth`; the frontend expects `oauth`.
+    #[serde(rename = "oauth")]
     OAuth,
     JsonlFallback,
 }

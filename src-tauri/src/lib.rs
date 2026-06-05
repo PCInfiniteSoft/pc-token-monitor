@@ -58,13 +58,28 @@ fn start_poll_loop(
         loop {
             let creds_path = oauth_fetcher::credentials_path();
             let new_usage = if let Some(token) = oauth_fetcher::load_access_token(&creds_path) {
-                oauth_fetcher::fetch_usage(&token).await.ok()
+                eprintln!("[poll] token found, fetching usage...");
+                match oauth_fetcher::fetch_usage(&token).await {
+                    Ok(u) => {
+                        eprintln!("[poll] fetch OK: 5h={} 7d={}", u.five_hour.utilization, u.seven_day.utilization);
+                        Some(u)
+                    }
+                    Err(e) => {
+                        eprintln!("[poll] fetch ERR: {e}");
+                        None
+                    }
+                }
             } else {
+                eprintln!("[poll] no token, using fallback");
                 None
             };
 
             let usage = if let Some(u) = new_usage {
                 Some(u)
+            } else if let Some(prev) = state.lock().unwrap().clone() {
+                // OAuth failed (offline or rate-limited): keep the last known
+                // value instead of dropping the display to 0%.
+                Some(prev)
             } else {
                 let dir = jsonl_parser::claude_projects_dir();
                 let _events = jsonl_parser::scan_projects_dir(&dir);
@@ -112,7 +127,15 @@ fn start_poll_loop(
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let config = config::load_config(&config::config_path());
+            let mut config = config::load_config(&config::config_path());
+            // Auto-detect the plan from Claude's local credentials so the user
+            // never has to pick one. Credentials are the source of truth, so
+            // this overrides any stale/manually-saved plan when available.
+            let detected = oauth_fetcher::load_plan(&oauth_fetcher::credentials_path());
+            if detected != Plan::Unknown && detected != config.plan {
+                config.plan = detected;
+                let _ = config::save_config(&config::config_path(), &config);
+            }
             let usage_arc: Arc<Mutex<Option<UsageData>>> = Arc::new(Mutex::new(None));
             let config_arc = Arc::new(Mutex::new(config));
 

@@ -51,12 +51,12 @@ export function UsageBar({ label, utilization, resetsAt, labelColor }: Props) {
         </div>
         <span
           className="font-mono text-xs w-8 text-right shrink-0"
-          style={{ color: atLimit ? "#ff3232" : "#ffffff" }}
+          style={{ color: atLimit ? "#ff3232" : "var(--ov-text)" }}
         >
           {pct}%
         </span>
       </div>
-      <div className="font-mono text-[9px] text-[#666] pl-10">
+      <div className="font-mono text-[9px] pl-10" style={{ color: "var(--ov-muted)" }}>
         {atLimit ? (
           <span className="text-[#ff3232]">Limit reached</span>
         ) : (

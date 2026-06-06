@@ -41,20 +41,14 @@ fn save_plan(plan_str: String, state: State<AppState>) -> Result<(), String> {
     config::save_config(&config::config_path(), &config)
 }
 
+// The settings window is pre-built (hidden) at startup; opening it just shows
+// and focuses it. Building a window from inside a command callback wedges the
+// event loop, so never `.build()` here.
 pub fn open_settings_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
         let _ = w.set_focus();
-        return;
     }
-    let _ = tauri::WebviewWindowBuilder::new(
-        app,
-        "settings",
-        tauri::WebviewUrl::App("index.html".into()),
-    )
-    .title("PC Token Monitor — Settings")
-    .inner_size(380.0, 440.0)
-    .resizable(true)
-    .build();
 }
 
 #[tauri::command]
@@ -250,6 +244,29 @@ pub fn run() {
                     let _ = win_for_event.hide();
                 }
             });
+
+            // Pre-build the settings window (hidden) here in setup — the correct
+            // context. open_settings only show()/focus()es it. Closing it hides
+            // instead of destroying so it can be reopened.
+            if let Ok(settings_win) = tauri::WebviewWindowBuilder::new(
+                app,
+                "settings",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("PC Token Monitor — Settings")
+            .inner_size(380.0, 440.0)
+            .resizable(true)
+            .visible(false)
+            .build()
+            {
+                let sw = settings_win.clone();
+                settings_win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = sw.hide();
+                    }
+                });
+            }
 
             Ok(())
         })

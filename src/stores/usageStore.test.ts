@@ -10,7 +10,7 @@ const mockState: FrontendState = {
     extra_usage_enabled: false,
     source: "oauth",
   },
-  config: { plan: "Max50" },
+  config: { plan: "Max50", aot_mode: "auto", aot_allowlist: [] },
 };
 
 describe("usageStore", () => {

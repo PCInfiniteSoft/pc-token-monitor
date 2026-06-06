@@ -1,7 +1,10 @@
 # Overlay Layout Redesign + Claude User — Design
 
 Date: 2026-06-06
-Status: Approved (pending spec review)
+Status: ✅ Implemented & shipped in v0.2.0 (2026-06-06). Follow-up fix shipped
+too: plan now detected from `~/.claude.json` org tier (Max 20x), and the
+Settings window is pre-built at startup (building from a command hung the
+event loop).
 
 ## Problem / Goal
 

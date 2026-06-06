@@ -1,7 +1,11 @@
 # Context-Aware Always-on-Top + Settings Page — Design
 
 Date: 2026-06-06
-Status: Approved (pending spec review)
+Status: ✅ Implemented & shipped in v0.2.0 (2026-06-06). NOTE: the z-order
+toggle approach in this spec failed on Windows (flap/stuck/taskbar); the
+shipped implementation uses **hide/show + WS_EX_NOACTIVATE** instead (overlay
+stays permanently topmost; only visibility changes). Shell (explorer.exe) +
+own window treated as neutral. See `aot_watcher.rs` + memory.
 
 ## Problem
 

@@ -1,4 +1,4 @@
-use crate::types::{AppConfig, Plan};
+use crate::types::{AppConfig, AotMode, Plan};
 use std::path::PathBuf;
 
 pub fn config_path() -> PathBuf {
@@ -52,7 +52,7 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let (_dir, path) = temp_config_path();
-        let config = AppConfig { plan: Plan::Max50 };
+        let config = AppConfig { plan: Plan::Max50, ..Default::default() };
         save_config(&path, &config).unwrap();
         let loaded = load_config(&path);
         assert_eq!(loaded.plan, Plan::Max50);
@@ -68,5 +68,26 @@ mod tests {
     fn plan_from_extra_usage_preserves_user_selection() {
         let result = plan_from_extra_usage(true, &Plan::Max200);
         assert_eq!(result, Plan::Max200);
+    }
+
+    #[test]
+    fn default_config_is_auto_with_default_allowlist() {
+        let c = AppConfig::default();
+        assert_eq!(c.aot_mode, AotMode::Auto);
+        assert!(c.aot_allowlist.iter().any(|a| a == "claude.exe"));
+    }
+
+    #[test]
+    fn save_and_load_preserves_aot_settings() {
+        let (_dir, path) = temp_config_path();
+        let config = AppConfig {
+            plan: Plan::Pro,
+            aot_mode: AotMode::Pinned,
+            aot_allowlist: vec!["foo.exe".to_string()],
+        };
+        save_config(&path, &config).unwrap();
+        let loaded = load_config(&path);
+        assert_eq!(loaded.aot_mode, AotMode::Pinned);
+        assert_eq!(loaded.aot_allowlist, vec!["foo.exe".to_string()]);
     }
 }

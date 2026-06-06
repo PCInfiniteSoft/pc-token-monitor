@@ -44,14 +44,44 @@ impl std::fmt::Display for Plan {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AotMode {
+    Auto,
+    Pinned,
+}
+
+fn default_aot_mode() -> AotMode {
+    AotMode::Auto
+}
+
+fn default_aot_allowlist() -> Vec<String> {
+    vec![
+        "windowsterminal.exe".to_string(),
+        "powershell.exe".to_string(),
+        "pwsh.exe".to_string(),
+        "claude.exe".to_string(),
+        "cmd.exe".to_string(),
+        "conhost.exe".to_string(),
+    ]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub plan: Plan,
+    #[serde(default = "default_aot_mode")]
+    pub aot_mode: AotMode,
+    #[serde(default = "default_aot_allowlist")]
+    pub aot_allowlist: Vec<String>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
-        AppConfig { plan: Plan::Unknown }
+        AppConfig {
+            plan: Plan::Unknown,
+            aot_mode: default_aot_mode(),
+            aot_allowlist: default_aot_allowlist(),
+        }
     }
 }
 

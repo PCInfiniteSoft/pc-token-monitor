@@ -1,3 +1,4 @@
+mod aot_watcher;
 mod config;
 mod file_watcher;
 mod jsonl_parser;

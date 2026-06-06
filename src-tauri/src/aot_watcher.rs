@@ -65,13 +65,34 @@ fn foreground_exe() -> Option<(u32, String)> {
     None
 }
 
-/// Poll the foreground window every 400ms and pin/unpin the overlay.
+/// Windows shell surfaces (taskbar, Start, search). These flash in as the
+/// foreground while the user switches apps, so they are treated as neutral:
+/// the overlay holds its current pinned state instead of flapping.
+fn is_shell(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "explorer.exe"
+            | "startmenuexperiencehost.exe"
+            | "searchhost.exe"
+            | "searchapp.exe"
+            | "shellexperiencehost.exe"
+    )
+}
+
+/// Poll the foreground window and pin/unpin the overlay.
 pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
     tauri::async_runtime::spawn(async move {
         let self_pid = std::process::id();
-        let mut applied: Option<bool> = None;
+        // Set the overlay topmost once, and non-activating so it can never
+        // steal focus. After this only its *visibility* changes — never its
+        // z-order — which sidesteps the "won't restack" problem entirely.
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.set_always_on_top(true);
+            #[cfg(windows)]
+            set_no_activate(&win);
+        }
         loop {
-            tokio::time::sleep(Duration::from_millis(400)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             let Some(win) = app.get_webview_window("main") else {
                 continue;
@@ -84,17 +105,42 @@ pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
             let pin = match (&mode, foreground_exe()) {
                 (AotMode::Pinned, _) => true,
                 (AotMode::Auto, Some((pid, name))) => {
-                    should_pin(&mode, &allowlist, &name, pid == self_pid)
+                    // Hold the current state while our own window or a shell
+                    // surface is foreground; only real apps drive the decision.
+                    if pid == self_pid || is_shell(&name) {
+                        continue;
+                    }
+                    should_pin(&mode, &allowlist, &name, false)
                 }
                 (AotMode::Auto, None) => continue,
             };
 
-            if applied != Some(pin) {
-                let _ = win.set_always_on_top(pin);
-                applied = Some(pin);
+            // Show when pinned, hide otherwise. A hidden window has no z-order
+            // to fight, and showing an always-topmost window puts it back on
+            // top every time — no restack, no "stuck behind", no taskbar block.
+            let visible = win.is_visible().unwrap_or(true);
+            if pin && !visible {
+                let _ = win.show();
+            } else if !pin && visible {
+                let _ = win.hide();
             }
         }
     });
+}
+
+/// Make the window non-activating (`WS_EX_NOACTIVATE`) so clicks/raises never
+/// transfer keyboard focus to it.
+#[cfg(windows)]
+fn set_no_activate(win: &tauri::WebviewWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE,
+    };
+    if let Ok(hwnd) = win.hwnd() {
+        unsafe {
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE.0 as isize);
+        }
+    }
 }
 
 #[cfg(test)]

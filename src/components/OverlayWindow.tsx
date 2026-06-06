@@ -1,13 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { useUsageStore } from "../stores/usageStore";
+import { overlayPalette, type BgTheme } from "../overlayPalette";
 import { UsageBar } from "./UsageBar";
 import { PlanBadge } from "./PlanBadge";
 
 export function OverlayWindow() {
   const { frontendState, isOffline } = useUsageStore();
   const [alwaysOnTop, setAlwaysOnTop] = useState(true);
+
+  const [bgTheme, setBgTheme] = useState<BgTheme>("dark");
+
+  useEffect(() => {
+    const unlisten = listen<string>("bg-theme", (event) => {
+      setBgTheme(event.payload === "light" ? "light" : "dark");
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  const pal = overlayPalette(bgTheme);
 
   const usage = frontendState?.usage;
   const plan = frontendState?.config.plan ?? "Unknown";
@@ -28,10 +43,9 @@ export function OverlayWindow() {
       data-tauri-drag-region
       className="w-full h-full flex flex-col select-none"
       style={{
-        // Transparent window: a dark text shadow keeps the light text and bars
-        // legible over both light and dark desktop content behind the overlay.
-        textShadow:
-          "0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8), 0 0 1px rgba(0,0,0,0.9)",
+        textShadow: pal.shadow,
+        ["--ov-text" as string]: pal.text,
+        ["--ov-muted" as string]: pal.muted,
       }}
     >
       {/* Header */}
@@ -39,7 +53,7 @@ export function OverlayWindow() {
         data-tauri-drag-region
         className="flex items-center justify-between px-2 py-1 border-b border-[#1e1e1e]"
       >
-        <span className="font-mono text-[10px] text-[#555] tracking-widest pointer-events-none">
+        <span className="font-mono text-[10px] tracking-widest pointer-events-none" style={{ color: "var(--ov-muted)" }}>
           ⬡ PC TOKEN MONITOR
         </span>
         <span className="pointer-events-none">
@@ -55,17 +69,17 @@ export function OverlayWindow() {
               label="5HR"
               utilization={usage.five_hour.utilization}
               resetsAt={usage.five_hour.resets_at}
-              labelColor="#00d4ff"
+              labelColor={pal.label5}
             />
             <UsageBar
               label="7DAY"
               utilization={usage.seven_day.utilization}
               resetsAt={usage.seven_day.resets_at}
-              labelColor="#ffd700"
+              labelColor={pal.label7}
             />
           </>
         ) : (
-          <span className="font-mono text-[10px] text-[#444] text-center py-2">
+          <span className="font-mono text-[10px] text-center py-2" style={{ color: "var(--ov-muted)" }}>
             connecting...
           </span>
         )}
@@ -75,15 +89,15 @@ export function OverlayWindow() {
       <div className="flex items-center justify-between px-2 py-1 border-t border-[#1e1e1e]">
         <button
           onClick={toggleAlwaysOnTop}
-          className={`font-mono text-[9px] tracking-widest transition-colors ${
-            alwaysOnTop ? "text-[#00d4ff]" : "text-[#444]"
-          }`}
+          className="font-mono text-[9px] tracking-widest transition-colors"
+          style={{ color: alwaysOnTop ? pal.label5 : "var(--ov-muted)" }}
         >
           [⊤ ALWAYS ON TOP]
         </button>
         <button
           onClick={minimize}
-          className="font-mono text-[9px] text-[#444] hover:text-white transition-colors"
+          className="font-mono text-[9px] transition-opacity hover:opacity-70"
+          style={{ color: "var(--ov-muted)" }}
         >
           [×]
         </button>

@@ -1,6 +1,9 @@
 # Scaffold temp directory
 _scaffold/
 
+# Local dev/cert helper scripts (machine-specific, not for distribution)
+scripts/
+
 # Logs
 logs
 *.log

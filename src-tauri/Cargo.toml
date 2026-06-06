@@ -2,8 +2,10 @@
 name = "pc-token-monitor"
 version = "0.1.0"
 description = "PC Token Monitor - Claude Code token usage overlay"
-authors = ["you"]
+authors = ["PC Infinite Soft"]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/PCInfiniteSoft/pc-token-monitor"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

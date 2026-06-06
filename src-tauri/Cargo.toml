@@ -1,6 +1,6 @@
 [package]
 name = "pc-token-monitor"
-version = "0.1.0"
+version = "0.2.0"
 description = "PC Token Monitor - Claude Code token usage overlay"
 authors = ["PC Infinite Soft"]
 edition = "2021"

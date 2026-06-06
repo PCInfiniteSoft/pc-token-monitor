@@ -172,6 +172,7 @@ pub fn run() {
             let usage_for_poll = usage_arc.clone();
             let config_for_poll = config_arc.clone();
             start_poll_loop(app_handle.clone(), usage_for_poll, config_for_poll);
+            aot_watcher::start_aot_watcher(app_handle.clone(), config_arc.clone());
 
             let watch_dir = jsonl_parser::claude_projects_dir();
             if watch_dir.exists() {

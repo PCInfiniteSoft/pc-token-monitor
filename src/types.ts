@@ -15,8 +15,12 @@ export interface UsageData {
 
 export type Plan = "Pro" | "Max50" | "Max200" | "Unknown";
 
+export type AotMode = "auto" | "pinned";
+
 export interface AppConfig {
   plan: Plan;
+  aot_mode: AotMode;
+  aot_allowlist: string[];
 }
 
 export interface FrontendState {

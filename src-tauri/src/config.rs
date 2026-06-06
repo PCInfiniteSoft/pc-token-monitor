@@ -1,4 +1,4 @@
-use crate::types::{AppConfig, AotMode, Plan};
+use crate::types::{AppConfig, Plan};
 use std::path::PathBuf;
 
 pub fn config_path() -> PathBuf {
@@ -34,6 +34,7 @@ pub fn plan_from_extra_usage(extra_usage_enabled: bool, saved: &Plan) -> Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::AotMode;
     use tempfile::TempDir;
 
     fn temp_config_path() -> (TempDir, PathBuf) {

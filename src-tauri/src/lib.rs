@@ -2,6 +2,7 @@ mod config;
 mod file_watcher;
 mod jsonl_parser;
 mod oauth_fetcher;
+mod bg_sampler;
 mod tray;
 mod types;
 

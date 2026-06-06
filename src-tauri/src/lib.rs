@@ -173,10 +173,14 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let mut config = config::load_config(&config::config_path());
-            // Auto-detect the plan from Claude's local credentials so the user
-            // never has to pick one. Credentials are the source of truth, so
-            // this overrides any stale/manually-saved plan when available.
-            let detected = oauth_fetcher::load_plan(&oauth_fetcher::credentials_path());
+            // Auto-detect the plan so the user never has to pick one. The
+            // account org tier in ~/.claude.json is authoritative (reflects
+            // Max 20x/5x); fall back to credentials subscriptionType only if
+            // the account file doesn't resolve a plan.
+            let mut detected = account::load_plan(&account::account_path());
+            if detected == Plan::Unknown {
+                detected = oauth_fetcher::load_plan(&oauth_fetcher::credentials_path());
+            }
             if detected != Plan::Unknown && detected != config.plan {
                 config.plan = detected;
                 let _ = config::save_config(&config::config_path(), &config);

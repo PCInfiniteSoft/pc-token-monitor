@@ -10,7 +10,7 @@ mod types;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
-use types::{AppConfig, DataSource, FrontendState, Plan, UsageData, WindowUsage};
+use types::{AotMode, AppConfig, DataSource, FrontendState, Plan, UsageData, WindowUsage};
 
 struct AppState {
     usage: Arc<Mutex<Option<UsageData>>>,
@@ -43,6 +43,51 @@ fn set_always_on_top(value: bool, app: AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.set_always_on_top(value);
     }
+}
+
+pub fn open_settings_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("PC Token Monitor — Settings")
+    .inner_size(380.0, 440.0)
+    .resizable(true)
+    .build();
+}
+
+#[tauri::command]
+fn set_aot_mode(mode: String, state: State<AppState>) -> Result<(), String> {
+    let m = if mode == "pinned" {
+        AotMode::Pinned
+    } else {
+        AotMode::Auto
+    };
+    let mut config = state.config.lock().unwrap();
+    config.aot_mode = m;
+    config::save_config(&config::config_path(), &config)
+}
+
+#[tauri::command]
+fn set_aot_allowlist(list: Vec<String>, state: State<AppState>) -> Result<(), String> {
+    let cleaned: Vec<String> = list
+        .into_iter()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let mut config = state.config.lock().unwrap();
+    config.aot_allowlist = cleaned;
+    config::save_config(&config::config_path(), &config)
+}
+
+#[tauri::command]
+fn open_settings(app: AppHandle) {
+    open_settings_window(&app);
 }
 
 fn dominant_percent(usage: &UsageData) -> u8 {
@@ -199,7 +244,14 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_state, save_plan, set_always_on_top])
+        .invoke_handler(tauri::generate_handler![
+            get_state,
+            save_plan,
+            set_always_on_top,
+            set_aot_mode,
+            set_aot_allowlist,
+            open_settings
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

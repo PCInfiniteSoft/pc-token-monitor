@@ -1,3 +1,4 @@
+mod account;
 mod aot_watcher;
 mod config;
 mod file_watcher;

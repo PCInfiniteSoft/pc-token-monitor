@@ -26,4 +26,5 @@ export interface AppConfig {
 export interface FrontendState {
   usage: UsageData | null;
   config: AppConfig;
+  user_name: string | null;
 }

@@ -11,6 +11,7 @@ const mockState: FrontendState = {
     source: "oauth",
   },
   config: { plan: "Max50", aot_mode: "auto", aot_allowlist: [] },
+  user_name: "Cocoa",
 };
 
 describe("usageStore", () => {

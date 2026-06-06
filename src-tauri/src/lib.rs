@@ -16,6 +16,7 @@ use types::{AotMode, AppConfig, DataSource, FrontendState, Plan, UsageData, Wind
 struct AppState {
     usage: Arc<Mutex<Option<UsageData>>>,
     config: Arc<Mutex<AppConfig>>,
+    user_name: Option<String>,
 }
 
 #[tauri::command]
@@ -23,6 +24,7 @@ fn get_state(state: State<AppState>) -> FrontendState {
     FrontendState {
         usage: state.usage.lock().unwrap().clone(),
         config: state.config.lock().unwrap().clone(),
+        user_name: state.user_name.clone(),
     }
 }
 
@@ -93,6 +95,7 @@ fn start_poll_loop(
     app: AppHandle,
     state: Arc<Mutex<Option<UsageData>>>,
     config: Arc<Mutex<AppConfig>>,
+    user_name: Option<String>,
 ) {
     // Use tauri::async_runtime::spawn so it runs within Tauri's managed tokio runtime.
     tauri::async_runtime::spawn(async move {
@@ -155,6 +158,7 @@ fn start_poll_loop(
                 let frontend = FrontendState {
                     usage: Some(u.clone()),
                     config: cfg,
+                    user_name: user_name.clone(),
                 };
                 let _ = app.emit("usage-updated", frontend);
             }
@@ -180,9 +184,11 @@ pub fn run() {
             let usage_arc: Arc<Mutex<Option<UsageData>>> = Arc::new(Mutex::new(None));
             let config_arc = Arc::new(Mutex::new(config));
 
+            let user_name = account::load_user_name(&account::account_path());
             app.manage(AppState {
                 usage: usage_arc.clone(),
                 config: config_arc.clone(),
+                user_name: user_name.clone(),
             });
 
             tray::setup_tray(app)?;
@@ -210,7 +216,12 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let usage_for_poll = usage_arc.clone();
             let config_for_poll = config_arc.clone();
-            start_poll_loop(app_handle.clone(), usage_for_poll, config_for_poll);
+            start_poll_loop(
+                app_handle.clone(),
+                usage_for_poll,
+                config_for_poll,
+                user_name.clone(),
+            );
             aot_watcher::start_aot_watcher(app_handle.clone(), config_arc.clone());
 
             let watch_dir = jsonl_parser::claude_projects_dir();

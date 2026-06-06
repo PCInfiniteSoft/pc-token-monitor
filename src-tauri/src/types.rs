@@ -89,4 +89,5 @@ impl Default for AppConfig {
 pub struct FrontendState {
     pub usage: Option<UsageData>,
     pub config: AppConfig,
+    pub user_name: Option<String>,
 }

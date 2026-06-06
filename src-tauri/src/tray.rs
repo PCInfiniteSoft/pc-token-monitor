@@ -3,7 +3,7 @@ use image::{ImageBuffer, Rgba};
 use imageproc::drawing::draw_text_mut;
 use tauri::{App, Manager};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::menu::{Menu, MenuItemBuilder, CheckMenuItemBuilder};
+use tauri::menu::{Menu, MenuItemBuilder};
 
 const FONT_BYTES: &[u8] = include_bytes!("../fonts/JetBrainsMono-Bold.ttf");
 
@@ -71,13 +71,10 @@ pub fn icon_rgba_for_percent(percent: u8) -> Vec<u8> {
 
 pub fn setup_tray(app: &App) -> tauri::Result<()> {
     let show_hide = MenuItemBuilder::new("Show / Hide").id("show_hide").build(app)?;
-    let always_on_top = CheckMenuItemBuilder::new("Always on Top")
-        .id("always_on_top")
-        .checked(true)
-        .build(app)?;
+    let settings = MenuItemBuilder::new("Settings").id("settings").build(app)?;
     let quit = MenuItemBuilder::new("Quit").id("quit").build(app)?;
 
-    let menu = Menu::with_items(app, &[&show_hide, &always_on_top, &quit])?;
+    let menu = Menu::with_items(app, &[&show_hide, &settings, &quit])?;
 
     let initial_rgba = icon_rgba_for_percent(0);
     let initial_icon = tauri::image::Image::new(&initial_rgba, 32, 32);
@@ -95,10 +92,8 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
                     let _ = win.set_focus();
                 }
             }
-            "always_on_top" => {
-                let win = app.get_webview_window("main").unwrap();
-                let current = win.is_always_on_top().unwrap_or(false);
-                let _ = win.set_always_on_top(!current);
+            "settings" => {
+                crate::open_settings_window(app);
             }
             "quit" => app.exit(0),
             _ => {}

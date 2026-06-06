@@ -38,13 +38,6 @@ fn save_plan(plan_str: String, state: State<AppState>) -> Result<(), String> {
     config::save_config(&config::config_path(), &config)
 }
 
-#[tauri::command]
-fn set_always_on_top(value: bool, app: AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.set_always_on_top(value);
-    }
-}
-
 pub fn open_settings_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.set_focus();
@@ -247,7 +240,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_state,
             save_plan,
-            set_always_on_top,
             set_aot_mode,
             set_aot_allowlist,
             open_settings

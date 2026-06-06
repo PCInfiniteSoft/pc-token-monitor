@@ -4,12 +4,19 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { useUsageStore } from "../stores/usageStore";
 import { overlayPalette, type BgTheme } from "../overlayPalette";
+import type { AotMode } from "../types";
 import { UsageBar } from "./UsageBar";
 import { PlanBadge } from "./PlanBadge";
 
 export function OverlayWindow() {
   const { frontendState, isOffline } = useUsageStore();
-  const [alwaysOnTop, setAlwaysOnTop] = useState(true);
+  const [aotMode, setAotMode] = useState<AotMode>("auto");
+
+  useEffect(() => {
+    if (frontendState?.config.aot_mode) {
+      setAotMode(frontendState.config.aot_mode);
+    }
+  }, [frontendState?.config.aot_mode]);
 
   const [bgTheme, setBgTheme] = useState<BgTheme>("dark");
 
@@ -28,10 +35,14 @@ export function OverlayWindow() {
   const plan = frontendState?.config.plan ?? "Unknown";
   const offline = isOffline();
 
-  function toggleAlwaysOnTop() {
-    const next = !alwaysOnTop;
-    setAlwaysOnTop(next);
-    invoke("set_always_on_top", { value: next });
+  function toggleMode() {
+    const next: AotMode = aotMode === "auto" ? "pinned" : "auto";
+    setAotMode(next);
+    invoke("set_aot_mode", { mode: next }).catch(() => {});
+  }
+
+  function openSettings() {
+    invoke("open_settings").catch(() => {});
   }
 
   function minimize() {
@@ -88,19 +99,29 @@ export function OverlayWindow() {
       {/* Footer controls */}
       <div className="flex items-center justify-between px-2 py-1 border-t border-[#1e1e1e]">
         <button
-          onClick={toggleAlwaysOnTop}
+          onClick={toggleMode}
           className="font-mono text-[9px] tracking-widest transition-colors"
-          style={{ color: alwaysOnTop ? pal.label5 : "var(--ov-muted)" }}
+          style={{ color: aotMode === "pinned" ? pal.label5 : "var(--ov-muted)" }}
         >
-          [⊤ ALWAYS ON TOP]
+          [⊤ {aotMode === "pinned" ? "PINNED" : "AUTO"}]
         </button>
-        <button
-          onClick={minimize}
-          className="font-mono text-[9px] transition-opacity hover:opacity-70"
-          style={{ color: "var(--ov-muted)" }}
-        >
-          [×]
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openSettings}
+            className="font-mono text-[9px] transition-opacity hover:opacity-70"
+            style={{ color: "var(--ov-muted)" }}
+            aria-label="settings"
+          >
+            ⚙
+          </button>
+          <button
+            onClick={minimize}
+            className="font-mono text-[9px] transition-opacity hover:opacity-70"
+            style={{ color: "var(--ov-muted)" }}
+          >
+            [×]
+          </button>
+        </div>
       </div>
     </div>
   );

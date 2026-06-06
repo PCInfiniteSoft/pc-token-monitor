@@ -2813,6 +2813,7 @@ dependencies = [
  "tauri-build",
  "tempfile",
  "tokio",
+ "windows",
 ]
 
 [[package]]

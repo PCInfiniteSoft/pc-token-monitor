@@ -165,6 +165,8 @@ pub fn run() {
                 }
             }
 
+            bg_sampler::start_bg_sampler(app.handle().clone());
+
             let app_handle = app.handle().clone();
             let usage_for_poll = usage_arc.clone();
             let config_for_poll = config_arc.clone();

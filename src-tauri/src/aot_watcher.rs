@@ -65,6 +65,59 @@ fn foreground_exe() -> Option<(u32, String)> {
     None
 }
 
+/// Whether any process whose exe basename matches `allowlist` (case-insensitive)
+/// is currently running. Used to hide the overlay in Auto mode once every
+/// monitored app has been closed — there is nothing left to pin to.
+#[cfg(windows)]
+fn any_monitored_running(allowlist: &[String]) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
+    if allowlist.is_empty() {
+        return false;
+    }
+
+    unsafe {
+        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            // If we can't enumerate, fail safe: assume something is running so
+            // the overlay is never hidden by a transient API failure.
+            return true;
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut found = false;
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                let end = entry
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(entry.szExeFile.len());
+                let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
+                if allowlist.iter().any(|a| a.eq_ignore_ascii_case(&name)) {
+                    found = true;
+                    break;
+                }
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snapshot);
+        found
+    }
+}
+
+#[cfg(not(windows))]
+fn any_monitored_running(_allowlist: &[String]) -> bool {
+    true
+}
+
 /// Windows shell surfaces (taskbar, Start, search). These flash in as the
 /// foreground while the user switches apps, so they are treated as neutral:
 /// the overlay holds its current pinned state instead of flapping.
@@ -91,6 +144,12 @@ pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
             #[cfg(windows)]
             set_no_activate(&win);
         }
+        // Throttle the (relatively expensive) process-list scan to ~once per
+        // second; reuse the cached result on the in-between 200ms ticks.
+        let mut monitored_cached = true;
+        let mut last_proc_check = std::time::Instant::now()
+            .checked_sub(Duration::from_secs(2))
+            .unwrap_or_else(std::time::Instant::now);
         loop {
             tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -102,8 +161,21 @@ pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
                 (c.aot_mode.clone(), c.aot_allowlist.clone())
             };
 
+            // Refresh the "is any monitored app running" cache at most once a
+            // second. Only Auto mode consumes it, so skip the scan in Pinned.
+            if matches!(mode, AotMode::Auto)
+                && last_proc_check.elapsed() >= Duration::from_secs(1)
+            {
+                monitored_cached = any_monitored_running(&allowlist);
+                last_proc_check = std::time::Instant::now();
+            }
+
             let pin = match (&mode, foreground_exe()) {
                 (AotMode::Pinned, _) => true,
+                // Nothing left to monitor — hide regardless of foreground,
+                // including over shell/self surfaces that would otherwise hold
+                // the last pinned state.
+                (AotMode::Auto, _) if !monitored_cached => false,
                 (AotMode::Auto, Some((pid, name))) => {
                     // Hold the current state while our own window or a shell
                     // surface is foreground; only real apps drive the decision.

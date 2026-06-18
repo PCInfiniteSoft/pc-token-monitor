@@ -234,7 +234,11 @@ pub fn run() {
                 user_name.clone(),
                 started_online.clone(),
             );
-            aot_watcher::start_aot_watcher(app_handle.clone(), config_arc.clone());
+            aot_watcher::start_aot_watcher(
+                app_handle.clone(),
+                config_arc.clone(),
+                started_online.clone(),
+            );
 
             let watch_dir = jsonl_parser::claude_projects_dir();
             if watch_dir.exists() {

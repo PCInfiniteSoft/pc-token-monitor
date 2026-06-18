@@ -1,5 +1,6 @@
 //! Watches the foreground window and pins/unpins the overlay accordingly.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -154,7 +155,11 @@ fn is_shell(name: &str) -> bool {
 }
 
 /// Poll the foreground window and pin/unpin the overlay.
-pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
+pub fn start_aot_watcher(
+    app: AppHandle,
+    config: Arc<Mutex<AppConfig>>,
+    started_online: Arc<AtomicBool>,
+) {
     tauri::async_runtime::spawn(async move {
         let self_pid = std::process::id();
         // Set the overlay topmost once, and non-activating so it can never
@@ -177,6 +182,17 @@ pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
             let Some(win) = app.get_webview_window("main") else {
                 continue;
             };
+
+            // Until live data first arrives, keep the overlay hidden in the tray
+            // (one-shot). Once online, this gate is permanently open and the
+            // normal pin logic below runs unchanged.
+            if !started_online.load(Ordering::SeqCst) {
+                if win.is_visible().unwrap_or(false) {
+                    let _ = win.hide();
+                }
+                continue;
+            }
+
             let (mode, allowlist) = {
                 let c = config.lock().unwrap();
                 (c.aot_mode.clone(), c.aot_allowlist.clone())

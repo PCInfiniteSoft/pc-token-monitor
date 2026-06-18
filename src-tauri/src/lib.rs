@@ -8,6 +8,7 @@ mod bg_sampler;
 mod tray;
 mod types;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -85,11 +86,18 @@ fn dominant_percent(usage: &UsageData) -> u8 {
     pct.min(100)
 }
 
+/// Whether a data source represents live (online) data. Fallback JSONL data is
+/// what the OFFLINE badge reflects, so anything else counts as online.
+fn source_is_live(source: &DataSource) -> bool {
+    *source != DataSource::JsonlFallback
+}
+
 fn start_poll_loop(
     app: AppHandle,
     state: Arc<Mutex<Option<UsageData>>>,
     config: Arc<Mutex<AppConfig>>,
     user_name: Option<String>,
+    started_online: Arc<AtomicBool>,
 ) {
     // Use tauri::async_runtime::spawn so it runs within Tauri's managed tokio runtime.
     tauri::async_runtime::spawn(async move {
@@ -145,6 +153,9 @@ fn start_poll_loop(
             }
 
             if let Some(ref u) = usage {
+                if source_is_live(&u.source) {
+                    started_online.store(true, Ordering::SeqCst);
+                }
                 let pct = dominant_percent(u);
                 tray::update_tray_icon(&app, pct);
 
@@ -211,6 +222,8 @@ pub fn run() {
 
             bg_sampler::start_bg_sampler(app.handle().clone());
 
+            let started_online = Arc::new(AtomicBool::new(false));
+
             let app_handle = app.handle().clone();
             let usage_for_poll = usage_arc.clone();
             let config_for_poll = config_arc.clone();
@@ -219,6 +232,7 @@ pub fn run() {
                 usage_for_poll,
                 config_for_poll,
                 user_name.clone(),
+                started_online.clone(),
             );
             aot_watcher::start_aot_watcher(app_handle.clone(), config_arc.clone());
 
@@ -279,4 +293,19 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn live_source_is_online() {
+        assert!(source_is_live(&DataSource::OAuth));
+    }
+
+    #[test]
+    fn jsonl_fallback_is_offline() {
+        assert!(!source_is_live(&DataSource::JsonlFallback));
+    }
 }

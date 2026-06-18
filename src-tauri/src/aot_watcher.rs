@@ -185,7 +185,10 @@ pub fn start_aot_watcher(
 
             // Until live data first arrives, keep the overlay hidden in the tray
             // (one-shot). Once online, this gate is permanently open and the
-            // normal pin logic below runs unchanged.
+            // normal pin logic below runs unchanged. Note: while this gate is
+            // closed it overrides a tray-initiated `show()` (tray.rs) — the
+            // window is re-hidden on the next tick — so the overlay is
+            // intentionally unreachable until first online.
             if !started_online.load(Ordering::SeqCst) {
                 if win.is_visible().unwrap_or(false) {
                     let _ = win.hide();

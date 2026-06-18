@@ -12,8 +12,10 @@ and the plan badge reads `[OFFLINE]` with 0% across the board. The user sees a
 useless 0% overlay flash onto the screen before any real data exists.
 
 Desired behavior: at first boot, if the status is OFFLINE, keep the overlay
-hidden in the system tray. As soon as it goes online for the first time, show it
-normally (per the existing Auto/Pinned always-on-top behavior).
+hidden in the system tray. As soon as it goes online for the first time, stop
+forcing it hidden and resume the normal Auto/Pinned show/hide behavior (so in
+Auto mode it appears when a monitored app is foreground/visible, not
+unconditionally).
 
 ## What "OFFLINE" means here
 
@@ -53,7 +55,8 @@ window visibility.
 ### Components
 
 1. **`started_online: Arc<AtomicBool>`** — initialized `false`.
-   - Stored in `AppState` (`src-tauri/src/lib.rs`).
+   - A `setup`-local binding in `src-tauri/src/lib.rs` — **not** added to
+     `AppState`, since no Tauri command reads it (YAGNI).
    - Cloned into both the poll loop and `aot_watcher::start_aot_watcher`.
 
 2. **Poll loop (`start_poll_loop`, `src-tauri/src/lib.rs`)**

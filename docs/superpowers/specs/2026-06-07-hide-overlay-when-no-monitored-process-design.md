@@ -1,7 +1,23 @@
 # Hide overlay when no monitored process is running
 
 **Date:** 2026-06-07
-**Status:** Approved, ready for implementation
+**Status:** Shipped, then revised 2026-06-09 (see "Revision" below)
+
+## Revision (2026-06-09): visible window, not live process
+
+The original "is any monitored process running" check was the wrong proxy.
+Apps like Claude **minimize to the tray on close**: every `claude.exe` process
+keeps running with no visible window (confirmed: 10 live `claude.exe` PIDs all
+reporting `MainWindowHandle = 0`). So the process-existence gate stayed `true`
+forever and the overlay never hid — it only disappeared when the user gave
+focus to another (non-allowlisted, non-shell) app.
+
+The gate is now **"does any monitored app have a visible top-level window"**
+(`any_monitored_visible`), mirroring how .NET computes `MainWindowHandle`:
+`EnumWindows` + `IsWindowVisible` + `!IsIconic` + unowned (`GW_OWNER == null`).
+When Claude sits in the tray it has no such window → overlay hides within ~1s.
+The Toolhelp process snapshot and its `Win32_System_Diagnostics_ToolHelp` Cargo
+feature were removed. Throttle, shell-hold, and fail-safe behavior are unchanged.
 
 ## Problem
 

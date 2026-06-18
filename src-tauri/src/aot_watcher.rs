@@ -20,16 +20,40 @@ pub fn should_pin(mode: &AotMode, allowlist: &[String], fg_name: &str, fg_is_sel
     }
 }
 
-/// The foreground window's process id and exe basename. `None` if it can't be
-/// determined.
+/// The exe basename (e.g. `claude.exe`) for a process id, or `None` if the
+/// process can't be opened/queried.
 #[cfg(windows)]
-fn foreground_exe() -> Option<(u32, String)> {
+fn exe_basename(pid: u32) -> Option<String> {
     use windows::core::PWSTR;
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 260];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
+        let _ = CloseHandle(handle);
+        if ok.is_err() {
+            return None;
+        }
+        let full = String::from_utf16_lossy(&buf[..len as usize]);
+        Some(
+            full.rsplit(|c| c == '\\' || c == '/')
+                .next()
+                .unwrap_or(&full)
+                .to_string(),
+        )
+    }
+}
+
+/// The foreground window's process id and exe basename. `None` if it can't be
+/// determined.
+#[cfg(windows)]
+fn foreground_exe() -> Option<(u32, String)> {
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
     unsafe {
@@ -42,20 +66,7 @@ fn foreground_exe() -> Option<(u32, String)> {
         if pid == 0 {
             return None;
         }
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-        let mut buf = [0u16; 260];
-        let mut len = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
-        let _ = CloseHandle(handle);
-        if ok.is_err() {
-            return None;
-        }
-        let full = String::from_utf16_lossy(&buf[..len as usize]);
-        let name = full
-            .rsplit(|c| c == '\\' || c == '/')
-            .next()
-            .unwrap_or(&full)
-            .to_string();
+        let name = exe_basename(pid)?;
         Some((pid, name))
     }
 }
@@ -65,56 +76,66 @@ fn foreground_exe() -> Option<(u32, String)> {
     None
 }
 
-/// Whether any process whose exe basename matches `allowlist` (case-insensitive)
-/// is currently running. Used to hide the overlay in Auto mode once every
-/// monitored app has been closed — there is nothing left to pin to.
+/// Whether any monitored app currently has a *visible* top-level window. Used
+/// to hide the overlay in Auto mode once every monitored app is gone from the
+/// screen — there is nothing left to pin to.
+///
+/// We check for a visible window rather than a live process because apps like
+/// Claude minimize to the tray on close: the `claude.exe` processes keep
+/// running with no visible window, so a process-existence check would keep the
+/// overlay pinned forever. This mirrors how .NET computes `MainWindowHandle`
+/// (`EnumWindows` + `IsWindowVisible` + unowned top-level), which we confirmed
+/// reads 0 while Claude sits in the tray.
 #[cfg(windows)]
-fn any_monitored_running(allowlist: &[String]) -> bool {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
-        TH32CS_SNAPPROCESS,
+fn any_monitored_visible(allowlist: &[String]) -> bool {
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindow, GetWindowThreadProcessId, IsIconic, IsWindowVisible, GW_OWNER,
     };
 
     if allowlist.is_empty() {
         return false;
     }
 
-    unsafe {
-        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
-            // If we can't enumerate, fail safe: assume something is running so
-            // the overlay is never hidden by a transient API failure.
-            return true;
-        };
-        let mut entry = PROCESSENTRY32W {
-            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
-            ..Default::default()
-        };
-        let mut found = false;
-        if Process32FirstW(snapshot, &mut entry).is_ok() {
-            loop {
-                let end = entry
-                    .szExeFile
-                    .iter()
-                    .position(|&c| c == 0)
-                    .unwrap_or(entry.szExeFile.len());
-                let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
-                if allowlist.iter().any(|a| a.eq_ignore_ascii_case(&name)) {
-                    found = true;
-                    break;
-                }
-                if Process32NextW(snapshot, &mut entry).is_err() {
-                    break;
+    struct Ctx<'a> {
+        allowlist: &'a [String],
+        found: bool,
+    }
+
+    unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = &mut *(lparam.0 as *mut Ctx);
+        // Skip hidden, minimized, and owned (dialog/popup) windows — only a
+        // real, on-screen main window counts.
+        if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
+            return true.into();
+        }
+        if !GetWindow(hwnd, GW_OWNER).unwrap_or_default().0.is_null() {
+            return true.into();
+        }
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid != 0 {
+            if let Some(name) = exe_basename(pid) {
+                if ctx.allowlist.iter().any(|a| a.eq_ignore_ascii_case(&name)) {
+                    ctx.found = true;
+                    return false.into(); // stop enumeration
                 }
             }
         }
-        let _ = CloseHandle(snapshot);
-        found
+        true.into() // keep enumerating
     }
+
+    let mut ctx = Ctx { allowlist, found: false };
+    let r = unsafe { EnumWindows(Some(enum_cb), LPARAM(&mut ctx as *mut _ as isize)) };
+    // `found` is authoritative (the callback returns FALSE only after a match,
+    // which makes EnumWindows report an error). A genuine enumeration failure
+    // with no match is rare — fail safe by keeping the overlay shown.
+    ctx.found || r.is_err()
 }
 
 #[cfg(not(windows))]
-fn any_monitored_running(_allowlist: &[String]) -> bool {
+fn any_monitored_visible(_allowlist: &[String]) -> bool {
     true
 }
 
@@ -161,12 +182,12 @@ pub fn start_aot_watcher(app: AppHandle, config: Arc<Mutex<AppConfig>>) {
                 (c.aot_mode.clone(), c.aot_allowlist.clone())
             };
 
-            // Refresh the "is any monitored app running" cache at most once a
+            // Refresh the "is any monitored app visible" cache at most once a
             // second. Only Auto mode consumes it, so skip the scan in Pinned.
             if matches!(mode, AotMode::Auto)
                 && last_proc_check.elapsed() >= Duration::from_secs(1)
             {
-                monitored_cached = any_monitored_running(&allowlist);
+                monitored_cached = any_monitored_visible(&allowlist);
                 last_proc_check = std::time::Instant::now();
             }
 

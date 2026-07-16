@@ -37,6 +37,10 @@ export function OverlayWindow() {
     getCurrentWindow().hide().catch(() => {});
   }
 
+  function quit() {
+    invoke("quit_app").catch(() => {});
+  }
+
   return (
     <div
       data-tauri-drag-region
@@ -66,6 +70,14 @@ export function OverlayWindow() {
             aria-label="settings"
           >
             ⚙
+          </button>
+          <button
+            onClick={quit}
+            className="font-mono text-[10px] transition-opacity hover:opacity-70"
+            style={{ color: "var(--ov-muted)" }}
+            aria-label="quit"
+          >
+            ⏻
           </button>
           <button
             onClick={minimize}

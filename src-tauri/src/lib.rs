@@ -82,6 +82,11 @@ fn open_settings(app: AppHandle) {
     open_settings_window(&app);
 }
 
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 #[cfg(not(target_os = "macos"))]
 fn dominant_percent(usage: &UsageData) -> u8 {
     let pct = (usage.five_hour.utilization.max(usage.seven_day.utilization) * 100.0) as u8;
@@ -311,7 +316,8 @@ pub fn run() {
             save_plan,
             set_aot_mode,
             set_aot_allowlist,
-            open_settings
+            open_settings,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

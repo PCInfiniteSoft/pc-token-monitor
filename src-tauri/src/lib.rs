@@ -1,4 +1,5 @@
 mod account;
+#[cfg(windows)]
 mod aot_watcher;
 mod config;
 mod file_watcher;

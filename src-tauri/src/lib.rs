@@ -81,8 +81,16 @@ fn open_settings(app: AppHandle) {
     open_settings_window(&app);
 }
 
+#[cfg(not(target_os = "macos"))]
 fn dominant_percent(usage: &UsageData) -> u8 {
     let pct = (usage.five_hour.utilization.max(usage.seven_day.utilization) * 100.0) as u8;
+    pct.min(100)
+}
+
+/// macOS menu bar shows the 5-hour window only.
+#[cfg(target_os = "macos")]
+fn five_hour_percent(usage: &UsageData) -> u8 {
+    let pct = (usage.five_hour.utilization * 100.0) as u8;
     pct.min(100)
 }
 
@@ -156,6 +164,9 @@ fn start_poll_loop(
                 if source_is_live(&u.source) {
                     started_online.store(true, Ordering::SeqCst);
                 }
+                #[cfg(target_os = "macos")]
+                let pct = five_hour_percent(u);
+                #[cfg(not(target_os = "macos"))]
                 let pct = dominant_percent(u);
                 tray::update_tray_icon(&app, pct);
 

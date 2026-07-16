@@ -7,9 +7,12 @@ use tauri::menu::{Menu, MenuItemBuilder};
 
 const FONT_BYTES: &[u8] = include_bytes!("../fonts/JetBrainsMono-Bold.ttf");
 
-/// Popover width fallback — must match the `main` window `width` in tauri.conf.json.
+/// macOS popover panel dimensions (logical points). The window is resized to
+/// these at startup (see lib.rs); the Windows overlay keeps its tauri.conf.json size.
 #[cfg(target_os = "macos")]
-const POPOVER_WIDTH: f64 = 200.0;
+pub const POPOVER_WIDTH: f64 = 270.0;
+#[cfg(target_os = "macos")]
+pub const POPOVER_HEIGHT: f64 = 204.0;
 
 /// The three usage bands, shared by the Windows badge icon and the macOS dot.
 fn band_color(percent: u8) -> Rgba<u8> {

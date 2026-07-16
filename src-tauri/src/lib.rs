@@ -237,6 +237,15 @@ pub fn run() {
                 }
             }
 
+            // macOS: the popover panel is roomier than the Windows overlay.
+            #[cfg(target_os = "macos")]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_size(tauri::LogicalSize::new(
+                    tray::POPOVER_WIDTH,
+                    tray::POPOVER_HEIGHT,
+                ));
+            }
+
             bg_sampler::start_bg_sampler(app.handle().clone());
 
             let started_online = Arc::new(AtomicBool::new(false));

@@ -84,6 +84,16 @@ pub fn icon_rgba_for_percent(percent: u8) -> Vec<u8> {
     img.into_raw()
 }
 
+/// Place the popover just below the menu-bar item, centered on the click.
+#[cfg(target_os = "macos")]
+fn position_popover(win: &tauri::WebviewWindow, cursor: tauri::PhysicalPosition<f64>) {
+    let width = win.outer_size().map(|s| s.width as f64).unwrap_or(200.0);
+    let x = (cursor.x - width / 2.0).max(8.0);
+    // The click y sits inside the menu bar; add a small gap so the panel clears it.
+    let y = cursor.y + 6.0;
+    let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
 pub fn setup_tray(app: &App) -> tauri::Result<()> {
     let show_hide = MenuItemBuilder::new("Show / Hide").id("show_hide").build(app)?;
     let settings = MenuItemBuilder::new("Settings").id("settings").build(app)?;
@@ -94,9 +104,15 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
     let initial_rgba = icon_rgba_for_percent(0);
     let initial_icon = tauri::image::Image::new(&initial_rgba, 32, 32);
 
-    TrayIconBuilder::with_id("main")
+    let mut builder = TrayIconBuilder::with_id("main")
         .icon(initial_icon)
-        .menu(&menu)
+        .menu(&menu);
+    #[cfg(target_os = "macos")]
+    {
+        // Left-click drives the popover; the Settings/Quit menu stays on right-click.
+        builder = builder.show_menu_on_left_click(false);
+    }
+    builder
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show_hide" => {
                 let win = app.get_webview_window("main").unwrap();
@@ -117,6 +133,7 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
+                position: _position,
                 ..
             } = event
             {
@@ -125,6 +142,8 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
                 if win.is_visible().unwrap_or(false) {
                     let _ = win.hide();
                 } else {
+                    #[cfg(target_os = "macos")]
+                    position_popover(&win, _position);
                     let _ = win.show();
                     let _ = win.set_focus();
                 }

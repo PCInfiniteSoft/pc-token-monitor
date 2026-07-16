@@ -267,11 +267,16 @@ pub fn run() {
             // Clone because on_window_event borrows main_win while the move closure
             // also needs to own a handle to it.
             let win_for_event = main_win.clone();
-            main_win.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            main_win.on_window_event(move |event| match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = win_for_event.hide();
                 }
+                #[cfg(target_os = "macos")]
+                tauri::WindowEvent::Focused(false) => {
+                    let _ = win_for_event.hide();
+                }
+                _ => {}
             });
 
             // Pre-build the settings window (hidden) here in setup — the correct

@@ -245,6 +245,7 @@ pub fn run() {
                 user_name.clone(),
                 started_online.clone(),
             );
+            #[cfg(windows)]
             aot_watcher::start_aot_watcher(
                 app_handle.clone(),
                 config_arc.clone(),

@@ -5,6 +5,8 @@ import { useTauriEvents } from "./hooks/useTauriEvents";
 import { OverlayWindow } from "./components/OverlayWindow";
 import { FirstRunDialog } from "./components/FirstRunDialog";
 import { Settings } from "./components/Settings";
+import { MacPopover } from "./components/MacPopover";
+import { isMacOS } from "./platform";
 
 export default function App() {
   if (getCurrentWindow().label === "settings") {
@@ -28,5 +30,5 @@ function OverlayApp() {
     return <FirstRunDialog onDone={() => setShowFirstRun(false)} />;
   }
 
-  return <OverlayWindow />;
+  return isMacOS() ? <MacPopover /> : <OverlayWindow />;
 }

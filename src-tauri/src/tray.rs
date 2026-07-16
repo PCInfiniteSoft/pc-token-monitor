@@ -7,6 +7,10 @@ use tauri::menu::{Menu, MenuItemBuilder};
 
 const FONT_BYTES: &[u8] = include_bytes!("../fonts/JetBrainsMono-Bold.ttf");
 
+/// Popover width fallback — must match the `main` window `width` in tauri.conf.json.
+#[cfg(target_os = "macos")]
+const POPOVER_WIDTH: f64 = 200.0;
+
 /// The three usage bands, shared by the Windows badge icon and the macOS dot.
 fn band_color(percent: u8) -> Rgba<u8> {
     if percent >= 90 {
@@ -87,7 +91,7 @@ pub fn icon_rgba_for_percent(percent: u8) -> Vec<u8> {
 /// Place the popover just below the menu-bar item, centered on the click.
 #[cfg(target_os = "macos")]
 fn position_popover(win: &tauri::WebviewWindow, cursor: tauri::PhysicalPosition<f64>) {
-    let width = win.outer_size().map(|s| s.width as f64).unwrap_or(200.0);
+    let width = win.outer_size().map(|s| s.width as f64).unwrap_or(POPOVER_WIDTH);
     let x = (cursor.x - width / 2.0).max(8.0);
     // The click y sits inside the menu bar; add a small gap so the panel clears it.
     let y = cursor.y + 6.0;
@@ -95,11 +99,15 @@ fn position_popover(win: &tauri::WebviewWindow, cursor: tauri::PhysicalPosition<
 }
 
 pub fn setup_tray(app: &App) -> tauri::Result<()> {
+    #[cfg(not(target_os = "macos"))]
     let show_hide = MenuItemBuilder::new("Show / Hide").id("show_hide").build(app)?;
     let settings = MenuItemBuilder::new("Settings").id("settings").build(app)?;
     let quit = MenuItemBuilder::new("Quit").id("quit").build(app)?;
 
+    #[cfg(not(target_os = "macos"))]
     let menu = Menu::with_items(app, &[&show_hide, &settings, &quit])?;
+    #[cfg(target_os = "macos")]
+    let menu = Menu::with_items(app, &[&settings, &quit])?;
 
     let initial_rgba = icon_rgba_for_percent(0);
     let initial_icon = tauri::image::Image::new(&initial_rgba, 32, 32);
@@ -145,6 +153,8 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
                     #[cfg(target_os = "macos")]
                     position_popover(&win, _position);
                     let _ = win.show();
+                    // On macOS the popover auto-hides on blur (WindowEvent::Focused(false) in
+                    // lib.rs); showing + focusing here is what keeps it open until click-away.
                     let _ = win.set_focus();
                 }
             }

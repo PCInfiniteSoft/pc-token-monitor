@@ -22,4 +22,9 @@ describe("PlanBadge", () => {
     render(<PlanBadge plan="Pro" offline={true} />);
     expect(screen.getByText("[OFFLINE]")).toBeInTheDocument();
   });
+
+  it("renders the glass variant without brackets", () => {
+    render(<PlanBadge plan="Max200" offline={false} variant="glass" />);
+    expect(screen.getByText("MAX 200")).toBeInTheDocument();
+  });
 });

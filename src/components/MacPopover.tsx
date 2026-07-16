@@ -73,7 +73,7 @@ export function MacPopover() {
           <span className="text-[14px] font-semibold tracking-tight">
             Claude Usage
           </span>
-          <PlanBadge plan={plan} offline={offline} />
+          <PlanBadge plan={plan} offline={offline} variant="glass" />
         </div>
 
         {/* usage windows */}

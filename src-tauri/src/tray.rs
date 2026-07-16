@@ -7,18 +7,33 @@ use tauri::menu::{Menu, MenuItemBuilder};
 
 const FONT_BYTES: &[u8] = include_bytes!("../fonts/JetBrainsMono-Bold.ttf");
 
-pub fn icon_rgba_for_percent(percent: u8) -> Vec<u8> {
-    let size = 32u32;
-    // Backgrounds are kept dark/saturated so the white number stays high
-    // contrast at tiny tray sizes; a bright fill (e.g. light cyan) washes the
-    // digits out even with an outline.
-    let bg_color = if percent >= 90 {
+/// The three usage bands, shared by the Windows badge icon and the macOS dot.
+fn band_color(percent: u8) -> Rgba<u8> {
+    if percent >= 90 {
         Rgba([211u8, 47, 47, 255]) // deep red
     } else if percent >= 70 {
         Rgba([216u8, 110, 0, 255]) // deep amber
     } else {
         Rgba([0u8, 103, 184, 255]) // deep azure
-    };
+    }
+}
+
+/// A small filled dot in the band color on a transparent background, used as
+/// the macOS menu-bar icon alongside the `set_title` percentage.
+pub fn dot_rgba(percent: u8) -> Vec<u8> {
+    let size = 32u32;
+    let mut img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+        ImageBuffer::from_pixel(size, size, Rgba([0, 0, 0, 0]));
+    imageproc::drawing::draw_filled_circle_mut(&mut img, (16, 16), 9, band_color(percent));
+    img.into_raw()
+}
+
+pub fn icon_rgba_for_percent(percent: u8) -> Vec<u8> {
+    let size = 32u32;
+    // Backgrounds are kept dark/saturated so the white number stays high
+    // contrast at tiny tray sizes; a bright fill (e.g. light cyan) washes the
+    // digits out even with an outline.
+    let bg_color = band_color(percent);
 
     let mut img: ImageBuffer<Rgba<u8>, Vec<u8>> =
         ImageBuffer::from_pixel(size, size, bg_color);
@@ -122,10 +137,21 @@ pub fn setup_tray(app: &App) -> tauri::Result<()> {
 
 pub fn update_tray_icon(app: &tauri::AppHandle, percent: u8) {
     if let Some(tray) = app.tray_by_id("main") {
-        let rgba = icon_rgba_for_percent(percent);
-        let icon = tauri::image::Image::new(&rgba, 32, 32);
-        let _ = tray.set_icon(Some(icon));
-        let _ = tray.set_tooltip(Some(&format!("PC Token Monitor — {percent}%")));
+        #[cfg(target_os = "macos")]
+        {
+            let rgba = dot_rgba(percent);
+            let icon = tauri::image::Image::new(&rgba, 32, 32);
+            let _ = tray.set_icon(Some(icon));
+            let _ = tray.set_title(Some(format!("{percent}%")));
+            let _ = tray.set_tooltip(Some(&format!("PC Token Monitor — {percent}%")));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let rgba = icon_rgba_for_percent(percent);
+            let icon = tauri::image::Image::new(&rgba, 32, 32);
+            let _ = tray.set_icon(Some(icon));
+            let _ = tray.set_tooltip(Some(&format!("PC Token Monitor — {percent}%")));
+        }
     }
 }
 
@@ -158,5 +184,38 @@ mod tests {
         let rgba = icon_rgba_for_percent(50);
         assert_eq!(rgba[0], 0);
         assert_eq!(rgba[1], 103);
+    }
+
+    #[test]
+    fn dot_rgba_correct_size() {
+        assert_eq!(dot_rgba(50).len(), 32 * 32 * 4);
+    }
+
+    #[test]
+    fn dot_rgba_transparent_corner() {
+        let rgba = dot_rgba(50);
+        // top-left pixel is outside the circle → fully transparent
+        assert_eq!(rgba[3], 0);
+    }
+
+    #[test]
+    fn dot_rgba_center_azure_below_70() {
+        let rgba = dot_rgba(50);
+        let idx = ((16 * 32 + 16) * 4) as usize;
+        assert_eq!(&rgba[idx..idx + 4], &[0, 103, 184, 255]);
+    }
+
+    #[test]
+    fn dot_rgba_center_amber_70_to_89() {
+        let rgba = dot_rgba(75);
+        let idx = ((16 * 32 + 16) * 4) as usize;
+        assert_eq!(&rgba[idx..idx + 4], &[216, 110, 0, 255]);
+    }
+
+    #[test]
+    fn dot_rgba_center_red_at_90_plus() {
+        let rgba = dot_rgba(90);
+        let idx = ((16 * 32 + 16) * 4) as usize;
+        assert_eq!(&rgba[idx..idx + 4], &[211, 47, 47, 255]);
     }
 }

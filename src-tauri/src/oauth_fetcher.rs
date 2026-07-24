@@ -52,6 +52,27 @@ fn read_file_credentials(path: &PathBuf) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }
 
+/// Read Claude Code's credential blob from the macOS login Keychain.
+/// Claude Code stores the same JSON as `.credentials.json` under this service.
+/// The first read triggers a one-time Keychain authorization prompt.
+#[cfg(target_os = "macos")]
+fn read_keychain_credentials() -> Option<String> {
+    let output = std::process::Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-w", "-s", "Claude Code-credentials"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let s = String::from_utf8(output.stdout).ok()?;
+    let trimmed = s.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
 fn parse_access_token(json: &str) -> Option<String> {
     let creds: CredentialsFile = serde_json::from_str(json).ok()?;
     creds.claude_ai_oauth.map(|o| o.access_token)
@@ -68,7 +89,17 @@ fn parse_plan(json: &str) -> Plan {
 }
 
 fn read_credentials_json() -> Option<String> {
-    read_file_credentials(&credentials_path())
+    if let Some(s) = read_file_credentials(&credentials_path()) {
+        return Some(s);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        read_keychain_credentials()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
 }
 
 pub fn load_access_token() -> Option<String> {

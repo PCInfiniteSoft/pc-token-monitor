@@ -116,8 +116,7 @@ fn start_poll_loop(
     // Use tauri::async_runtime::spawn so it runs within Tauri's managed tokio runtime.
     tauri::async_runtime::spawn(async move {
         loop {
-            let creds_path = oauth_fetcher::credentials_path();
-            let new_usage = if let Some(token) = oauth_fetcher::load_access_token(&creds_path) {
+            let new_usage = if let Some(token) = oauth_fetcher::load_access_token() {
                 eprintln!("[poll] token found, fetching usage...");
                 match oauth_fetcher::fetch_usage(&token).await {
                     Ok(u) => {
@@ -201,7 +200,7 @@ pub fn run() {
             // the account file doesn't resolve a plan.
             let mut detected = account::load_plan(&account::account_path());
             if detected == Plan::Unknown {
-                detected = oauth_fetcher::load_plan(&oauth_fetcher::credentials_path());
+                detected = oauth_fetcher::load_plan();
             }
             if detected != Plan::Unknown && detected != config.plan {
                 config.plan = detected;

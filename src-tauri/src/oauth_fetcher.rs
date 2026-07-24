@@ -67,8 +67,12 @@ fn parse_plan(json: &str) -> Plan {
     }
 }
 
-pub fn load_access_token(path: &PathBuf) -> Option<String> {
-    read_file_credentials(path).and_then(|j| parse_access_token(&j))
+fn read_credentials_json() -> Option<String> {
+    read_file_credentials(&credentials_path())
+}
+
+pub fn load_access_token() -> Option<String> {
+    read_credentials_json().and_then(|j| parse_access_token(&j))
 }
 
 /// Map Claude's local credentials to a plan so the user doesn't have to pick
@@ -89,8 +93,8 @@ pub fn detect_plan(subscription_type: Option<&str>, rate_limit_tier: Option<&str
     }
 }
 
-pub fn load_plan(path: &PathBuf) -> Plan {
-    read_file_credentials(path)
+pub fn load_plan() -> Plan {
+    read_credentials_json()
         .map(|j| parse_plan(&j))
         .unwrap_or(Plan::Unknown)
 }
@@ -191,12 +195,6 @@ mod tests {
     #[test]
     fn returns_err_on_malformed_json() {
         assert!(parse_oauth_response("not json").is_err());
-    }
-
-    #[test]
-    fn load_access_token_returns_none_for_missing_file() {
-        let path = PathBuf::from("/nonexistent/.credentials.json");
-        assert!(load_access_token(&path).is_none());
     }
 
     #[test]

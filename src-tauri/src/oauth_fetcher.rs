@@ -48,10 +48,27 @@ pub fn credentials_path() -> PathBuf {
         .join(".credentials.json")
 }
 
-pub fn load_access_token(path: &PathBuf) -> Option<String> {
-    let content = std::fs::read_to_string(path).ok()?;
-    let creds: CredentialsFile = serde_json::from_str(&content).ok()?;
+fn read_file_credentials(path: &PathBuf) -> Option<String> {
+    std::fs::read_to_string(path).ok()
+}
+
+fn parse_access_token(json: &str) -> Option<String> {
+    let creds: CredentialsFile = serde_json::from_str(json).ok()?;
     creds.claude_ai_oauth.map(|o| o.access_token)
+}
+
+fn parse_plan(json: &str) -> Plan {
+    match serde_json::from_str::<CredentialsFile>(json) {
+        Ok(creds) => match creds.claude_ai_oauth {
+            Some(o) => detect_plan(o.subscription_type.as_deref(), o.rate_limit_tier.as_deref()),
+            None => Plan::Unknown,
+        },
+        Err(_) => Plan::Unknown,
+    }
+}
+
+pub fn load_access_token(path: &PathBuf) -> Option<String> {
+    read_file_credentials(path).and_then(|j| parse_access_token(&j))
 }
 
 /// Map Claude's local credentials to a plan so the user doesn't have to pick
@@ -73,16 +90,9 @@ pub fn detect_plan(subscription_type: Option<&str>, rate_limit_tier: Option<&str
 }
 
 pub fn load_plan(path: &PathBuf) -> Plan {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Plan::Unknown;
-    };
-    let Ok(creds) = serde_json::from_str::<CredentialsFile>(&content) else {
-        return Plan::Unknown;
-    };
-    match creds.claude_ai_oauth {
-        Some(o) => detect_plan(o.subscription_type.as_deref(), o.rate_limit_tier.as_deref()),
-        None => Plan::Unknown,
-    }
+    read_file_credentials(path)
+        .map(|j| parse_plan(&j))
+        .unwrap_or(Plan::Unknown)
 }
 
 fn window_from_raw(raw: &OAuthWindowRaw) -> Result<WindowUsage, String> {
@@ -211,5 +221,47 @@ mod tests {
     fn utilization_normalized_to_fraction() {
         let data = parse_oauth_response(SAMPLE_RESPONSE).unwrap();
         assert!((data.five_hour.utilization - 0.73).abs() < f64::EPSILON);
+    }
+
+    const SAMPLE_CREDS: &str = r#"{
+        "claudeAiOauth": {
+            "accessToken": "sk-ant-oat-abc123",
+            "subscriptionType": "max",
+            "rateLimitTier": "max_20x"
+        }
+    }"#;
+
+    #[test]
+    fn parse_access_token_reads_token() {
+        assert_eq!(
+            parse_access_token(SAMPLE_CREDS),
+            Some("sk-ant-oat-abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_access_token_none_for_malformed() {
+        assert!(parse_access_token("not json").is_none());
+    }
+
+    #[test]
+    fn parse_access_token_none_when_oauth_missing() {
+        assert!(parse_access_token(r#"{"other": 1}"#).is_none());
+    }
+
+    #[test]
+    fn parse_plan_maps_max_20x() {
+        assert_eq!(parse_plan(SAMPLE_CREDS), Plan::Max200);
+    }
+
+    #[test]
+    fn parse_plan_unknown_for_malformed() {
+        assert_eq!(parse_plan("not json"), Plan::Unknown);
+    }
+
+    #[test]
+    fn read_file_credentials_none_for_missing_path() {
+        let path = PathBuf::from("/nonexistent/.credentials.json");
+        assert!(read_file_credentials(&path).is_none());
     }
 }

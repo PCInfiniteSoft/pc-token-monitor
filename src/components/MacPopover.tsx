@@ -64,10 +64,10 @@ export function MacPopover() {
 
   return (
     <div
-      className="w-full h-full p-1.5 bg-transparent select-none"
+      className="w-full h-full bg-transparent select-none"
       style={{ fontFamily: SYSTEM_FONT }}
     >
-      <div className="w-full h-full rounded-xl px-4 pt-3.5 pb-3 flex flex-col bg-white/80 dark:bg-[#282828]/80 backdrop-blur-2xl border-[0.5px] border-black/10 dark:border-white/15 shadow-2xl text-[#1c1c1e] dark:text-[#f2f2f7]">
+      <div className="w-full h-full rounded-xl px-4 pt-3.5 pb-3 flex flex-col bg-white/80 dark:bg-[#282828]/80 backdrop-blur-2xl border-[0.5px] border-black/10 dark:border-white/15 text-[#1c1c1e] dark:text-[#f2f2f7]">
         {/* header */}
         <div className="flex items-center justify-between mb-3.5">
           <span className="text-[14px] font-semibold tracking-tight">

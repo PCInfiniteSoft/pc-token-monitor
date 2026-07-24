@@ -11,8 +11,12 @@ const FONT_BYTES: &[u8] = include_bytes!("../fonts/JetBrainsMono-Bold.ttf");
 /// these at startup (see lib.rs); the Windows overlay keeps its tauri.conf.json size.
 #[cfg(target_os = "macos")]
 pub const POPOVER_WIDTH: f64 = 270.0;
+// The MacPopover card (header + two usage rows + footer) measures 238px tall at
+// this width; the height must clear that or the footer (Settings/Quit buttons)
+// overflows below the window and is only reachable by keyboard focus. 244 leaves
+// a small buffer for font-metric differences between browsers and the webview.
 #[cfg(target_os = "macos")]
-pub const POPOVER_HEIGHT: f64 = 204.0;
+pub const POPOVER_HEIGHT: f64 = 244.0;
 
 /// The three usage bands, shared by the Windows badge icon and the macOS dot.
 fn band_color(percent: u8) -> Rgba<u8> {

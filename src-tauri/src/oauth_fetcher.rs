@@ -61,15 +61,21 @@ fn read_keychain_credentials() -> Option<String> {
         .args(["find-generic-password", "-w", "-s", "Claude Code-credentials"])
         .output()
         .ok()?;
-    if !output.status.success() {
+    parse_security_output(output.status.success(), &output.stdout)
+}
+
+/// Pure parse of `security ... -w` output: on success, the trimmed non-empty
+/// UTF-8 stdout (the credential JSON blob); otherwise None.
+#[cfg(target_os = "macos")]
+fn parse_security_output(success: bool, stdout: &[u8]) -> Option<String> {
+    if !success {
         return None;
     }
-    let s = String::from_utf8(output.stdout).ok()?;
-    let trimmed = s.trim().to_string();
+    let trimmed = std::str::from_utf8(stdout).ok()?.trim();
     if trimmed.is_empty() {
         None
     } else {
-        Some(trimmed)
+        Some(trimmed.to_string())
     }
 }
 
@@ -292,5 +298,27 @@ mod tests {
     fn read_file_credentials_none_for_missing_path() {
         let path = PathBuf::from("/nonexistent/.credentials.json");
         assert!(read_file_credentials(&path).is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_security_output_returns_trimmed_blob_on_success() {
+        let out = b"  {\"claudeAiOauth\":{\"accessToken\":\"tok\"}}  \n";
+        assert_eq!(
+            parse_security_output(true, out),
+            Some("{\"claudeAiOauth\":{\"accessToken\":\"tok\"}}".to_string())
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_security_output_none_on_failure() {
+        assert!(parse_security_output(false, b"anything").is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_security_output_none_when_empty() {
+        assert!(parse_security_output(true, b"   \n  ").is_none());
     }
 }

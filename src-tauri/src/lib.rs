@@ -193,6 +193,11 @@ fn start_poll_loop(
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Menu-bar-only app on macOS: no Dock icon or app menu. The UI
+            // lives entirely in the menu bar item + its popover.
+            #[cfg(target_os = "macos")]
+            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let mut config = config::load_config(&config::config_path());
             // Auto-detect the plan so the user never has to pick one. The
             // account org tier in ~/.claude.json is authoritative (reflects

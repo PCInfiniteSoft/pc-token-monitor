@@ -1,4 +1,5 @@
 mod account;
+#[cfg(windows)]
 mod aot_watcher;
 mod config;
 mod file_watcher;
@@ -81,8 +82,21 @@ fn open_settings(app: AppHandle) {
     open_settings_window(&app);
 }
 
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+#[cfg(not(target_os = "macos"))]
 fn dominant_percent(usage: &UsageData) -> u8 {
     let pct = (usage.five_hour.utilization.max(usage.seven_day.utilization) * 100.0) as u8;
+    pct.min(100)
+}
+
+/// macOS menu bar shows the 5-hour window only.
+#[cfg(target_os = "macos")]
+fn five_hour_percent(usage: &UsageData) -> u8 {
+    let pct = (usage.five_hour.utilization * 100.0) as u8;
     pct.min(100)
 }
 
@@ -102,8 +116,7 @@ fn start_poll_loop(
     // Use tauri::async_runtime::spawn so it runs within Tauri's managed tokio runtime.
     tauri::async_runtime::spawn(async move {
         loop {
-            let creds_path = oauth_fetcher::credentials_path();
-            let new_usage = if let Some(token) = oauth_fetcher::load_access_token(&creds_path) {
+            let new_usage = if let Some(token) = oauth_fetcher::load_access_token() {
                 eprintln!("[poll] token found, fetching usage...");
                 match oauth_fetcher::fetch_usage(&token).await {
                     Ok(u) => {
@@ -156,6 +169,9 @@ fn start_poll_loop(
                 if source_is_live(&u.source) {
                     started_online.store(true, Ordering::SeqCst);
                 }
+                #[cfg(target_os = "macos")]
+                let pct = five_hour_percent(u);
+                #[cfg(not(target_os = "macos"))]
                 let pct = dominant_percent(u);
                 tray::update_tray_icon(&app, pct);
 
@@ -177,6 +193,11 @@ fn start_poll_loop(
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Menu-bar-only app on macOS: no Dock icon or app menu. The UI
+            // lives entirely in the menu bar item + its popover.
+            #[cfg(target_os = "macos")]
+            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let mut config = config::load_config(&config::config_path());
             // Auto-detect the plan so the user never has to pick one. The
             // account org tier in ~/.claude.json is authoritative (reflects
@@ -184,7 +205,7 @@ pub fn run() {
             // the account file doesn't resolve a plan.
             let mut detected = account::load_plan(&account::account_path());
             if detected == Plan::Unknown {
-                detected = oauth_fetcher::load_plan(&oauth_fetcher::credentials_path());
+                detected = oauth_fetcher::load_plan();
             }
             if detected != Plan::Unknown && detected != config.plan {
                 config.plan = detected;
@@ -220,6 +241,15 @@ pub fn run() {
                 }
             }
 
+            // macOS: the popover panel is roomier than the Windows overlay.
+            #[cfg(target_os = "macos")]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_size(tauri::LogicalSize::new(
+                    tray::POPOVER_WIDTH,
+                    tray::POPOVER_HEIGHT,
+                ));
+            }
+
             bg_sampler::start_bg_sampler(app.handle().clone());
 
             let started_online = Arc::new(AtomicBool::new(false));
@@ -234,6 +264,7 @@ pub fn run() {
                 user_name.clone(),
                 started_online.clone(),
             );
+            #[cfg(windows)]
             aot_watcher::start_aot_watcher(
                 app_handle.clone(),
                 config_arc.clone(),
@@ -256,11 +287,16 @@ pub fn run() {
             // Clone because on_window_event borrows main_win while the move closure
             // also needs to own a handle to it.
             let win_for_event = main_win.clone();
-            main_win.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            main_win.on_window_event(move |event| match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = win_for_event.hide();
                 }
+                #[cfg(target_os = "macos")]
+                tauri::WindowEvent::Focused(false) => {
+                    let _ = win_for_event.hide();
+                }
+                _ => {}
             });
 
             // Pre-build the settings window (hidden) here in setup — the correct
@@ -293,7 +329,8 @@ pub fn run() {
             save_plan,
             set_aot_mode,
             set_aot_allowlist,
-            open_settings
+            open_settings,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

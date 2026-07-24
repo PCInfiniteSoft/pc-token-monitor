@@ -48,10 +48,68 @@ pub fn credentials_path() -> PathBuf {
         .join(".credentials.json")
 }
 
-pub fn load_access_token(path: &PathBuf) -> Option<String> {
-    let content = std::fs::read_to_string(path).ok()?;
-    let creds: CredentialsFile = serde_json::from_str(&content).ok()?;
+fn read_file_credentials(path: &PathBuf) -> Option<String> {
+    std::fs::read_to_string(path).ok()
+}
+
+/// Read Claude Code's credential blob from the macOS login Keychain.
+/// Claude Code stores the same JSON as `.credentials.json` under this service.
+/// The first read triggers a one-time Keychain authorization prompt.
+#[cfg(target_os = "macos")]
+fn read_keychain_credentials() -> Option<String> {
+    let output = std::process::Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-w", "-s", "Claude Code-credentials"])
+        .output()
+        .ok()?;
+    parse_security_output(output.status.success(), &output.stdout)
+}
+
+/// Pure parse of `security ... -w` output: on success, the trimmed non-empty
+/// UTF-8 stdout (the credential JSON blob); otherwise None.
+#[cfg(target_os = "macos")]
+fn parse_security_output(success: bool, stdout: &[u8]) -> Option<String> {
+    if !success {
+        return None;
+    }
+    let trimmed = std::str::from_utf8(stdout).ok()?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn parse_access_token(json: &str) -> Option<String> {
+    let creds: CredentialsFile = serde_json::from_str(json).ok()?;
     creds.claude_ai_oauth.map(|o| o.access_token)
+}
+
+fn parse_plan(json: &str) -> Plan {
+    match serde_json::from_str::<CredentialsFile>(json) {
+        Ok(creds) => match creds.claude_ai_oauth {
+            Some(o) => detect_plan(o.subscription_type.as_deref(), o.rate_limit_tier.as_deref()),
+            None => Plan::Unknown,
+        },
+        Err(_) => Plan::Unknown,
+    }
+}
+
+fn read_credentials_json() -> Option<String> {
+    if let Some(s) = read_file_credentials(&credentials_path()) {
+        return Some(s);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        read_keychain_credentials()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
+pub fn load_access_token() -> Option<String> {
+    read_credentials_json().and_then(|j| parse_access_token(&j))
 }
 
 /// Map Claude's local credentials to a plan so the user doesn't have to pick
@@ -72,17 +130,10 @@ pub fn detect_plan(subscription_type: Option<&str>, rate_limit_tier: Option<&str
     }
 }
 
-pub fn load_plan(path: &PathBuf) -> Plan {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Plan::Unknown;
-    };
-    let Ok(creds) = serde_json::from_str::<CredentialsFile>(&content) else {
-        return Plan::Unknown;
-    };
-    match creds.claude_ai_oauth {
-        Some(o) => detect_plan(o.subscription_type.as_deref(), o.rate_limit_tier.as_deref()),
-        None => Plan::Unknown,
-    }
+pub fn load_plan() -> Plan {
+    read_credentials_json()
+        .map(|j| parse_plan(&j))
+        .unwrap_or(Plan::Unknown)
 }
 
 fn window_from_raw(raw: &OAuthWindowRaw) -> Result<WindowUsage, String> {
@@ -184,12 +235,6 @@ mod tests {
     }
 
     #[test]
-    fn load_access_token_returns_none_for_missing_file() {
-        let path = PathBuf::from("/nonexistent/.credentials.json");
-        assert!(load_access_token(&path).is_none());
-    }
-
-    #[test]
     fn detect_plan_maps_pro() {
         assert_eq!(detect_plan(Some("pro"), Some("default_claude_ai")), Plan::Pro);
     }
@@ -211,5 +256,69 @@ mod tests {
     fn utilization_normalized_to_fraction() {
         let data = parse_oauth_response(SAMPLE_RESPONSE).unwrap();
         assert!((data.five_hour.utilization - 0.73).abs() < f64::EPSILON);
+    }
+
+    const SAMPLE_CREDS: &str = r#"{
+        "claudeAiOauth": {
+            "accessToken": "sk-ant-oat-abc123",
+            "subscriptionType": "max",
+            "rateLimitTier": "max_20x"
+        }
+    }"#;
+
+    #[test]
+    fn parse_access_token_reads_token() {
+        assert_eq!(
+            parse_access_token(SAMPLE_CREDS),
+            Some("sk-ant-oat-abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_access_token_none_for_malformed() {
+        assert!(parse_access_token("not json").is_none());
+    }
+
+    #[test]
+    fn parse_access_token_none_when_oauth_missing() {
+        assert!(parse_access_token(r#"{"other": 1}"#).is_none());
+    }
+
+    #[test]
+    fn parse_plan_maps_max_20x() {
+        assert_eq!(parse_plan(SAMPLE_CREDS), Plan::Max200);
+    }
+
+    #[test]
+    fn parse_plan_unknown_for_malformed() {
+        assert_eq!(parse_plan("not json"), Plan::Unknown);
+    }
+
+    #[test]
+    fn read_file_credentials_none_for_missing_path() {
+        let path = PathBuf::from("/nonexistent/.credentials.json");
+        assert!(read_file_credentials(&path).is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_security_output_returns_trimmed_blob_on_success() {
+        let out = b"  {\"claudeAiOauth\":{\"accessToken\":\"tok\"}}  \n";
+        assert_eq!(
+            parse_security_output(true, out),
+            Some("{\"claudeAiOauth\":{\"accessToken\":\"tok\"}}".to_string())
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_security_output_none_on_failure() {
+        assert!(parse_security_output(false, b"anything").is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_security_output_none_when_empty() {
+        assert!(parse_security_output(true, b"   \n  ").is_none());
     }
 }

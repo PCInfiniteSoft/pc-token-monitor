@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AotMode, FrontendState } from "../types";
+import { isMacOS } from "../platform";
 
 export function Settings() {
   const [mode, setMode] = useState<AotMode>("auto");
@@ -44,6 +45,14 @@ export function Settings() {
     <div className="min-h-screen bg-[#0a0a0a] text-[#e8e8e8] font-mono text-sm p-4 flex flex-col gap-4">
       <h1 className="text-base font-bold">Settings</h1>
 
+      {isMacOS() ? (
+        <p className="text-[11px] text-[#666] leading-relaxed">
+          The always-on-top and allowed-apps controls apply to the Windows overlay
+          only. On macOS this app lives in the menu bar, so there is nothing to
+          configure here.
+        </p>
+      ) : (
+      <>
       <section className="flex flex-col gap-2">
         <h2 className="text-xs text-[#888] uppercase tracking-widest">Always on top</h2>
         <div className="flex gap-2">
@@ -106,6 +115,8 @@ export function Settings() {
           </button>
         </div>
       </section>
+      </>
+      )}
     </div>
   );
 }
